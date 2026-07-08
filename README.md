@@ -8,9 +8,10 @@
 
 - **后端**: Python 3.x + Flask
 - **数据库**: SQLite
-- **爬虫**: requests + BeautifulSoup4
-- **PDF解析**: pdfplumber
-- **OCR识别**: Tesseract + pytesseract
+- **HTML抓取**: requests + BeautifulSoup4 (主) / Playwright (备选)
+- **PDF解析**: pdfplumber (文字层) / PaddleOCR (扫描版)
+- **OCR识别**: PaddleOCR (内置日文模型)
+- **纵排转换**: 内置日文纵排→横排自动转换
 - **Word导出**: python-docx
 - **前端**: HTML + Vanilla JS + CSS
 
@@ -54,12 +55,16 @@ sakubunn/
 ├── .gitignore               # Git忽略配置
 ├── modules/                 # 核心模块
 │   ├── __init__.py
-│   ├── spider_base.py       # Spider基类
+│   ├── spider_base.py       # Spider基类（自动判断抓取类型）
 │   ├── spider_manager.py    # Spider管理器
+│   ├── playwright_fetcher.py # Playwright备选抓取
+│   ├── paddle_ocr.py        # PaddleOCR日文识别
+│   ├── pdf_smart_parser.py  # PDF智能解析（文字层+OCR）
+│   ├── vertical_text_converter.py  # 纵排转横排
 │   ├── crawler.py           # 通用抓取工具
 │   ├── html_parser.py       # HTML解析
-│   ├── pdf_parser.py        # PDF解析
-│   ├── ocr_engine.py        # OCR识别
+│   ├── pdf_parser.py        # PDF基础解析
+│   ├── ocr_engine.py        # OCR识别（Tesseract备选）
 │   ├── formatter.py         # 数据整理
 │   ├── exporter.py          # Word导出
 │   └── cache.py             # 数据缓存
@@ -144,16 +149,61 @@ class MySpider(SpiderBase):
         )
 ```
 
+## 抓取类型自动判断
+
+Spider会自动判断目标URL采用哪种抓取方式：
+
+| 类型 | 说明 | 触发条件 |
+|------|------|---------|
+| **A** HTML单页 | requests + BS4 | 普通HTML页面 |
+| **B** HTML多层遍历 | requests + BS4 | 列表页含子页面链接 |
+| **C** PDF文字层 | pdfplumber | URL以.pdf结尾且有文字层 |
+| **D** PDF扫描版 | PaddleOCR | URL以.pdf结尾且无文字层 |
+
+### Playwright备选机制
+
+- 默认使用 `requests` 抓取（更快、更轻量）
+- 仅在以下情况自动启用 Playwright：
+  - HTML 内容过短（< 500 字节）
+  - 抓取失败（超时/网络错误）
+  - 文本内容过少（< 100 字符）
+- 不对所有网站启用 Playwright
+
+### PaddleOCR 内置
+
+- 首选 OCR 引擎，日文支持优秀
+- 首次使用自动下载模型（约 100MB）
+- 无需用户额外安装系统级 OCR 软件
+- 备选：Tesseract（`ocr_engine.py`）
+
+### PDF 智能处理
+
+- **文字层检测**: 自动判断PDF是否含文字
+- **有文字层**: 直接用 `pdfplumber` 提取
+- **无文字层**: 自动用 PaddleOCR 扫描识别
+- **多页文档**: 自动识别每页，提取最长正文块
+- **特殊页面**: 自动跳过封面、目录、空白页
+
+### 纵排转横排
+
+- 自动检测 HTML/CSS 中的 `writing-mode: vertical` 标记
+- 自动检测 PDF/OCR 文本的纵排特征
+- 转换为符合中文阅读习惯的横排顺序
+
 ## 模块说明
 
 | 模块 | 功能 |
 |------|------|
-| spider_base | Spider基类，定义抓取接口 |
+| spider_base | Spider基类，自动判断抓取类型+Playwright备选 |
 | spider_manager | 自动加载/管理所有Spider |
+| playwright_fetcher | Playwright备选抓取 |
+| paddle_ocr | PaddleOCR日文识别 |
+| pdf_smart_parser | PDF智能解析（文字层+OCR） |
+| vertical_text_converter | 纵排转横排 |
 | crawler | 通用HTTP抓取工具 |
 | html_parser | HTML解析工具 |
-| pdf_parser | PDF文件解析 |
-| ocr_engine | OCR识别引擎 |
+| pdf_parser | PDF基础解析 |
+| ocr_engine | Tesseract备选OCR |
 | formatter | 数据清洗/格式化 |
 | exporter | Word文档导出 |
 | cache | SQLite数据库操作 |

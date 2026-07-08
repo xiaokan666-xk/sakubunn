@@ -1,9 +1,22 @@
 import re
 import logging
 import requests
+import os
+import tempfile
 from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
+from urllib.parse import urljoin
+from modules.playwright_fetcher import PlaywrightFetcher
+from modules.paddle_ocr import PaddleOCREngine
+from modules.pdf_smart_parser import PDFSmartParser
+from modules.vertical_text_converter import VerticalTextConverter
+
+
+CRAWL_TYPE_HTML = 'A'
+CRAWL_TYPE_HTML_MULTI = 'B'
+CRAWL_TYPE_PDF_TEXT = 'C'
+CRAWL_TYPE_PDF_OCR = 'D'
 
 
 class SpiderBase(ABC):
@@ -18,16 +31,51 @@ class SpiderBase(ABC):
             'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
         })
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.playwright = PlaywrightFetcher()
+        self.ocr_engine = PaddleOCREngine()
+        self.pdf_parser = PDFSmartParser(ocr_engine=self.ocr_engine)
+        self.vertical_converter = VerticalTextConverter()
+        self._temp_dir = None
     
-    def fetch(self, url: str, timeout: int = 30) -> Optional[str]:
+    @property
+    def temp_dir(self):
+        if self._temp_dir is None:
+            from config import DATA_DIR
+            self._temp_dir = os.path.join(DATA_DIR, 'temp')
+            os.makedirs(self._temp_dir, exist_ok=True)
+        return self._temp_dir
+    
+    def fetch(self, url: str, timeout: int = 30, use_playwright_on_fail: bool = True) -> Optional[str]:
         try:
             response = self.session.get(url, timeout=timeout)
             response.raise_for_status()
             response.encoding = response.apparent_encoding
-            return response.text
+            html = response.text
+            
+            if self._is_meaningful_html(html) or not use_playwright_on_fail:
+                return html
+            
+            self.logger.info(f'HTML empty/poor, trying Playwright: {url}')
+            return self.playwright.fetch(url)
         except requests.RequestException as e:
-            self.logger.error(f'Fetch failed [{self.site_name}] {url}: {e}')
+            self.logger.warning(f'Requests fetch failed [{self.site_name}] {url}: {e}')
+            if use_playwright_on_fail:
+                self.logger.info(f'Falling back to Playwright: {url}')
+                return self.playwright.fetch(url)
             return None
+    
+    def _is_meaningful_html(self, html: str) -> bool:
+        if not html:
+            return False
+        if len(html) < 500:
+            return False
+        soup = BeautifulSoup(html, 'html.parser')
+        text = soup.get_text(strip=True)
+        if len(text) < 100:
+            return False
+        if soup.find('html') is None:
+            return False
+        return True
     
     def fetch_binary(self, url: str, timeout: int = 30) -> Optional[bytes]:
         try:
@@ -60,9 +108,62 @@ class SpiderBase(ABC):
             'site': self.site_name
         }
     
-    @abstractmethod
+    def detect_crawl_type(self, url: str) -> str:
+        if re.search(r'\.pdf(\?|$)', url, re.IGNORECASE):
+            return CRAWL_TYPE_PDF_TEXT
+        
+        html = self.fetch(url, use_playwright_on_fail=False)
+        if not html:
+            return CRAWL_TYPE_HTML
+        
+        soup = self.get_soup(html)
+        pdf_links = soup.find_all('a', href=re.compile(r'\.pdf', re.IGNORECASE))
+        if pdf_links:
+            return CRAWL_TYPE_HTML_MULTI
+        
+        return CRAWL_TYPE_HTML
+    
+    def is_pdf_url(self, url: str) -> bool:
+        return bool(re.search(r'\.pdf(\?|$)', url, re.IGNORECASE))
+    
+    def handle_pdf_url(self, pdf_url: str) -> Optional[Dict]:
+        self.logger.info(f'Handling PDF: {pdf_url}')
+        
+        content = self.fetch_binary(pdf_url)
+        if not content:
+            content = self.playwright.fetch_binary(pdf_url)
+        if not content:
+            return None
+        
+        filename = re.sub(r'[^\w\-_\.]', '_', os.path.basename(pdf_url.split('?')[0])) or 'temp.pdf'
+        pdf_path = os.path.join(self.temp_dir, filename)
+        
+        with open(pdf_path, 'wb') as f:
+            f.write(content)
+        
+        try:
+            result = self.pdf_parser.parse(pdf_path)
+            if result:
+                result['source'] = pdf_url
+                result['site'] = self.site_name
+            return result
+        finally:
+            try:
+                os.unlink(pdf_path)
+            except Exception:
+                pass
+    
+    def handle_vertical_text(self, html: str, text: str) -> str:
+        if self.vertical_converter.is_vertical_html(html):
+            self.logger.info(f'[{self.site_name}] Detected vertical HTML layout')
+            return self.vertical_converter.convert_vertical_to_horizontal(text)
+        if self.vertical_converter.is_vertical(text):
+            self.logger.info(f'[{self.site_name}] Detected vertical text layout')
+            return self.vertical_converter.convert_vertical_to_horizontal(text)
+        return text
+    
     def get_essay_list_urls(self) -> List[str]:
-        pass
+        return [self.site_url]
     
     @abstractmethod
     def parse_list_page(self, html: str, list_url: str) -> List[Dict]:
@@ -93,11 +194,16 @@ class SpiderBase(ABC):
                 if not essay_url:
                     continue
                 
-                essay_html = self.fetch(essay_url)
-                if not essay_html:
-                    continue
+                if self.is_pdf_url(essay_url):
+                    essay = self.handle_pdf_url(essay_url)
+                else:
+                    essay_html = self.fetch(essay_url)
+                    if not essay_html:
+                        continue
+                    essay = self.parse_essay_page(essay_html, essay_url)
+                    if essay and essay.get('body'):
+                        essay['body'] = self.handle_vertical_text(essay_html, essay['body'])
                 
-                essay = self.parse_essay_page(essay_html, essay_url)
                 if essay and essay.get('body'):
                     essays.append(essay)
                     self.logger.info(f'[{self.site_name}] Parsed: {essay["title"][:30]}')

@@ -5,4 +5,7 @@ pdfplumber>=0.7
 python-docx>=0.8
 pytesseract>=0.3
 Pillow>=9.0
-sqlite3
+playwright>=1.30
+paddleocr>=2.6
+paddlepaddle>=2.4
+pdf2image>=1.16
