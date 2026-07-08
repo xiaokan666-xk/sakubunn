@@ -48,12 +48,13 @@ python main.py
 
 ```
 sakubunn/
-├── main.py                  # 启动入口
+├── main.py                  # Flask启动入口
 ├── config.py                # 全局配置
 ├── requirements.txt         # 依赖列表
 ├── README.md                # 项目说明
 ├── .gitignore               # Git忽略配置
-├── modules/                 # 核心模块
+├── work-notes/              # 工作备注
+├── modules/                 # 后端核心模块
 │   ├── __init__.py
 │   ├── spider_base.py       # Spider基类（自动判断抓取类型）
 │   ├── spider_manager.py    # Spider管理器
@@ -61,14 +62,14 @@ sakubunn/
 │   ├── paddle_ocr.py        # PaddleOCR日文识别
 │   ├── pdf_smart_parser.py  # PDF智能解析（文字层+OCR）
 │   ├── vertical_text_converter.py  # 纵排转横排
+│   ├── error_tracker.py     # 抓取错误追踪
 │   ├── crawler.py           # 通用抓取工具
 │   ├── html_parser.py       # HTML解析
 │   ├── pdf_parser.py        # PDF基础解析
 │   ├── ocr_engine.py        # OCR识别（Tesseract备选）
 │   ├── formatter.py         # 数据整理
 │   ├── exporter.py          # Word导出
-│   ├── cache.py             # 数据缓存
-│   └── error_tracker.py     # 抓取错误追踪
+│   └── cache.py             # 数据缓存
 ├── spiders/                 # 网站Spider（每网站一个文件）
 │   ├── __init__.py
 │   ├── netnfu.py            # 日本福祉大学
@@ -80,9 +81,13 @@ sakubunn/
 │   └── index.html
 ├── static/                  # 静态资源
 │   ├── css/
+│   │   └── style.css
 │   └── js/
+│       └── app.js
 └── data/                    # 数据目录（运行时生成）
-    └── essays.db
+    ├── essays.db
+    ├── crawl_errors.json
+    └── temp/
 ```
 
 ## 统一数据结构
