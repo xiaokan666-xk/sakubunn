@@ -67,7 +67,8 @@ sakubunn/
 │   ├── ocr_engine.py        # OCR识别（Tesseract备选）
 │   ├── formatter.py         # 数据整理
 │   ├── exporter.py          # Word导出
-│   └── cache.py             # 数据缓存
+│   ├── cache.py             # 数据缓存
+│   └── error_tracker.py     # 抓取错误追踪
 ├── spiders/                 # 网站Spider（每网站一个文件）
 │   ├── __init__.py
 │   ├── netnfu.py            # 日本福祉大学
@@ -190,6 +191,34 @@ Spider会自动判断目标URL采用哪种抓取方式：
 - 自动检测 PDF/OCR 文本的纵排特征
 - 转换为符合中文阅读习惯的横排顺序
 
+## 抓取失败处理
+
+### 失败信息展示
+
+抓取失败时，网页会清晰显示：
+- **网站名称** - 哪个网站出问题
+- **网站地址** - 完整URL
+- **错误原因** - 具体失败类型和详情
+
+### 网站更新检测
+
+当网站改版导致规则失效时，系统会自动判断并提示：
+
+> "该网站页面可能已更新，请检查抓取规则。"
+
+### 不依赖AI
+
+- 所有抓取规则显式维护在 `spiders/` 目录下
+- 网站改版后只需修改对应 Spider 文件
+- 无需 AI 长期记忆或自动学习网页结构
+
+### 错误追踪
+
+- 错误记录保存到 `data/crawl_errors.json`
+- 支持按网站筛选、查询历史错误
+- API: `GET /api/failed_sites` - 获取所有失败网站
+- API: `GET /api/site_status` - 获取所有网站状态
+
 ## 模块说明
 
 | 模块 | 功能 |
@@ -207,6 +236,7 @@ Spider会自动判断目标URL采用哪种抓取方式：
 | formatter | 数据清洗/格式化 |
 | exporter | Word文档导出 |
 | cache | SQLite数据库操作 |
+| error_tracker | 抓取错误追踪+网站更新检测 |
 
 ## 许可证
 

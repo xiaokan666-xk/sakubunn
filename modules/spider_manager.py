@@ -3,12 +3,14 @@ import os
 import logging
 from typing import List, Dict
 from modules.spider_base import SpiderBase
+from modules.error_tracker import ErrorTracker
 
 
 class SpiderManager:
     def __init__(self, spiders_dir='spiders'):
         self.spiders_dir = spiders_dir
         self.spiders: Dict[str, SpiderBase] = {}
+        self.error_tracker = ErrorTracker()
         self.logger = logging.getLogger(__name__)
         self._load_spiders()
     
@@ -38,24 +40,85 @@ class SpiderManager:
     def get_spider(self, site_name: str) -> SpiderBase:
         return self.spiders.get(site_name)
     
-    def list_sites(self) -> List[str]:
-        return list(self.spiders.keys())
+    def list_sites(self) -> List[Dict]:
+        return [
+            {'name': spider.site_name, 'url': spider.site_url}
+            for spider in self.spiders.values()
+        ]
     
-    def crawl_site(self, site_name: str, max_count: int = None) -> List[Dict]:
+    def get_failed_sites(self) -> List[Dict]:
+        failed = []
+        for site_name, spider in self.spiders.items():
+            errors = self.error_tracker.get_errors(site_name)
+            if errors:
+                latest = errors[-1]
+                failed.append({
+                    'site_name': site_name,
+                    'site_url': spider.site_url,
+                    'error_type': latest.get('error_type', ''),
+                    'error_msg': latest.get('error_msg', ''),
+                    'time': latest.get('time', ''),
+                    'is_site_update_suspicion': latest.get('is_site_update_suspicion', False),
+                    'error_count': len(errors)
+                })
+        return failed
+    
+    def get_all_site_status(self) -> List[Dict]:
+        status = []
+        for site_name, spider in self.spiders.items():
+            errors = self.error_tracker.get_errors(site_name)
+            latest_error = errors[-1] if errors else None
+            status.append({
+                'site_name': site_name,
+                'site_url': spider.site_url,
+                'has_error': bool(errors),
+                'error_count': len(errors),
+                'latest_error': latest_error
+            })
+        return status
+    
+    def crawl_site(self, site_name: str, max_count: int = None) -> Dict:
         spider = self.get_spider(site_name)
         if not spider:
             self.logger.error(f'Spider not found: {site_name}')
-            return []
-        return spider.crawl(max_count=max_count)
+            return {
+                'success': False,
+                'essays': [],
+                'failures': [{
+                    'site_name': site_name,
+                    'site_url': '',
+                    'url': '',
+                    'error_type': 'SPIDER_NOT_FOUND',
+                    'error_msg': f'未找到该网站对应的Spider: {site_name}'
+                }]
+            }
+        
+        try:
+            essays = spider.crawl(max_count=max_count)
+            failures = spider.get_failures()
+            return {
+                'success': len(essays) > 0 or len(failures) == 0,
+                'essays': essays,
+                'failures': failures
+            }
+        except Exception as e:
+            self.logger.error(f'Crawl failed [{site_name}]: {e}')
+            return {
+                'success': False,
+                'essays': [],
+                'failures': [{
+                    'site_name': site_name,
+                    'site_url': spider.site_url,
+                    'url': '',
+                    'error_type': 'CRAWL_EXCEPTION',
+                    'error_msg': str(e)
+                }]
+            }
     
-    def crawl_all(self, max_per_site: int = None) -> Dict[str, List[Dict]]:
+    def crawl_all(self, max_per_site: int = None) -> Dict:
         results = {}
         for site_name, spider in self.spiders.items():
             self.logger.info(f'Starting crawl: {site_name}')
-            try:
-                essays = spider.crawl(max_count=max_per_site)
-                results[site_name] = essays
-            except Exception as e:
-                self.logger.error(f'Crawl failed [{site_name}]: {e}')
-                results[site_name] = []
+            result = self.crawl_site(site_name, max_count=max_per_site)
+            results[site_name] = result
         return results
