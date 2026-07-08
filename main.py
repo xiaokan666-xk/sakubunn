@@ -10,6 +10,7 @@ from config import DB_PATH, LOG_FILE
 from modules.cache import CacheManager
 from modules.exporter import WordExporter
 from modules.spider_manager import SpiderManager
+from modules.crawl_report import CrawlReport, CrawlReportManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,6 +26,7 @@ app = Flask(__name__)
 cache_manager = CacheManager()
 exporter = WordExporter()
 spider_manager = SpiderManager()
+report_manager = CrawlReportManager()
 
 
 @app.route('/')
@@ -145,7 +147,6 @@ def export_batch():
             'site': essay['site']
         })
 
-    # 命名：作文大赏2026.1.1-2026.7.1.docx
     if date_from and date_to:
         df = date_from.replace('-', '.').split(' ')[0]
         dt = date_to.replace('-', '.').split(' ')[0]
@@ -167,39 +168,64 @@ def crawl():
     full_mode = data.get('full_mode', False)
 
     def essay_exists_fn(url):
-        return cache_manager.essay_exists(url)
+        return cache_manager.essay_exists_by_url(url)
+
+    report = CrawlReport()
+    report.start()
 
     if site_name:
+        spider = spider_manager.get_spider(site_name)
         result = spider_manager.crawl_site(site_name, essay_exists_fn=essay_exists_fn, full_mode=full_mode, resource_cache=cache_manager)
         if result['success']:
             inserted = 0
             for essay in result['essays']:
                 if cache_manager.insert_essay(essay):
                     inserted += 1
-            cache_manager.update_site_crawl_time(site_name, spider_manager.get_spider(site_name).site_url)
+            cache_manager.update_site_crawl_time(site_name, spider.site_url)
+        report.add_site_result(site_name, spider.site_url if spider else '', result['essays'], result['failures'])
+        report.end()
+        report.save_report()
         return jsonify({
             'success': result['success'],
             'count': len(result['essays']),
-            'failures': result['failures']
+            'failures': result['failures'],
+            'report': report.generate_text_report()
         })
     else:
         results = spider_manager.crawl_all(essay_exists_fn=essay_exists_fn, full_mode=full_mode, resource_cache=cache_manager)
         total_count = 0
-        all_failures = []
         for site_name, result in results.items():
+            spider = spider_manager.get_spider(site_name)
             inserted = 0
             for essay in result['essays']:
                 if cache_manager.insert_essay(essay):
                     inserted += 1
             total_count += inserted
             if result['essays']:
-                cache_manager.update_site_crawl_time(site_name, spider_manager.get_spider(site_name).site_url)
-            all_failures.extend(result['failures'])
+                cache_manager.update_site_crawl_time(site_name, spider.site_url)
+            report.add_site_result(site_name, spider.site_url, result['essays'], result['failures'])
+        report.end()
+        report.save_report()
         return jsonify({
             'success': total_count > 0,
             'count': total_count,
-            'failures': all_failures
+            'report': report.generate_text_report()
         })
+
+
+@app.route('/api/reports', methods=['GET'])
+def get_reports():
+    limit = request.args.get('limit', 10, type=int)
+    reports = report_manager.get_latest_reports(limit)
+    return jsonify(reports)
+
+
+@app.route('/api/report/<filename>', methods=['GET'])
+def get_report(filename):
+    report = report_manager.get_report_by_filename(filename)
+    if report:
+        return jsonify(report)
+    return jsonify({'error': 'Report not found'}), 404
 
 
 @app.route('/api/failed_sites', methods=['GET'])

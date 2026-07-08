@@ -435,6 +435,9 @@ function startCrawl() {
     })
     .then(r => r.json())
     .then(data => {
+        if (data.report) {
+            showCrawlReport(data.report);
+        }
         showToast(`抓取完成，新增 ${data.count} 篇作文`);
         loadEssays();
         loadSites();
@@ -443,6 +446,26 @@ function startCrawl() {
         console.error('Crawl failed:', err);
         showToast('抓取失败，请查看日志');
     });
+}
+
+function showCrawlReport(reportText) {
+    const modal = document.getElementById('preview-modal');
+    const title = document.getElementById('modal-title');
+    const body = document.getElementById('modal-body');
+    const meta = document.querySelector('.modal-body .essay-meta');
+    const footerBtns = document.querySelector('.modal-footer');
+
+    title.textContent = '抓取报告';
+    if (meta) meta.style.display = 'none';
+    body.innerHTML = '';
+    body.style.whiteSpace = 'pre-wrap';
+    body.style.fontFamily = 'monospace';
+    body.style.fontSize = '13px';
+    body.style.lineHeight = '1.8';
+    body.textContent = reportText;
+
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
 
 // ========================================

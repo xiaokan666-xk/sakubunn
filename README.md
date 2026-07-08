@@ -87,8 +87,91 @@ sakubunn/
 └── data/                    # 数据目录（运行时生成）
     ├── essays.db
     ├── crawl_errors.json
+    ├── crawl_report_*.json  # 抓取日志报告
     └── temp/
 ```
+
+## 日志系统
+
+### 抓取报告
+
+每次抓取完成后自动生成详细报告：
+
+```
+抓取报告 - 2026-07-08 15:30:00
+========================================
+
+✔ 网站A
+新增 12 篇作文
+HTML解析成功
+————————————
+
+✔ 网站B
+PDF解析成功
+OCR完成
+新增 5 篇
+————————————
+
+✘ 网站C
+抓取失败
+403 Forbidden
+————————————
+
+总计：2 个网站成功，1 个网站失败
+新增作文：17 篇
+耗时：45秒
+```
+
+### 报告存储
+
+- 报告保存到 `data/reports/` 目录
+- JSON格式，包含完整抓取详情
+- API: `GET /api/reports` - 获取最近10条报告
+- API: `GET /api/report/<filename>` - 获取指定报告详情
+
+## 扩展能力
+
+### 低耦合设计
+
+项目采用模块化设计，各模块独立维护：
+
+- **SpiderManager** 自动发现并加载Spider
+- **CacheManager** 统一数据存储，不依赖具体Spider
+- **Exporter** 统一导出格式，不依赖具体网站
+- **ErrorTracker** 统一错误处理，不依赖具体Spider
+
+### 新增网站
+
+**只需一步：新建Spider文件**
+
+```bash
+# 1. 复制模板
+cp spiders/_example_template.py spiders/new_site.py
+
+# 2. 编辑Spider（填写site_name、site_url、解析规则）
+# 3. 运行程序，SpiderManager自动加载
+```
+
+**无需修改任何其他模块！**
+
+### 网站改版维护
+
+当网站HTML结构变化时：
+
+1. 打开对应Spider文件（如 `spiders/new_site.py`）
+2. 修改CSS选择器或解析逻辑
+3. 其他网站不受影响
+
+### Site Config + Spider分离
+
+每个网站拥有独立的配置和规则：
+
+- **site_name/site_url**: 网站基本信息
+- **list_urls**: 列表页URL配置
+- **parse_list_page**: 列页解析规则（CSS选择器）
+- **parse_essay_page**: 详情页解析规则（CSS选择器）
+
+程序**不依赖固定HTML结构**或**AI临时推理**，所有规则显式配置在Spider文件中。
 
 ## 统一数据结构
 
@@ -234,6 +317,7 @@ Spider会自动判断目标URL采用哪种抓取方式：
 | paddle_ocr | PaddleOCR日文识别 |
 | pdf_smart_parser | PDF智能解析（文字层+OCR） |
 | vertical_text_converter | 纵排转横排 |
+| crawl_report | 抓取日志报告生成与管理 |
 | crawler | 通用HTTP抓取工具 |
 | html_parser | HTML解析工具 |
 | pdf_parser | PDF基础解析 |
