@@ -170,7 +170,7 @@ def crawl():
         return cache_manager.essay_exists(url)
 
     if site_name:
-        result = spider_manager.crawl_site(site_name, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
+        result = spider_manager.crawl_site(site_name, essay_exists_fn=essay_exists_fn, full_mode=full_mode, resource_cache=cache_manager)
         if result['success']:
             inserted = 0
             for essay in result['essays']:
@@ -183,7 +183,7 @@ def crawl():
             'failures': result['failures']
         })
     else:
-        results = spider_manager.crawl_all(essay_exists_fn=essay_exists_fn, full_mode=full_mode)
+        results = spider_manager.crawl_all(essay_exists_fn=essay_exists_fn, full_mode=full_mode, resource_cache=cache_manager)
         total_count = 0
         all_failures = []
         for site_name, result in results.items():

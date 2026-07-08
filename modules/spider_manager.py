@@ -77,7 +77,7 @@ class SpiderManager:
             })
         return status
 
-    def crawl_site(self, site_name: str, max_count: int = None, essay_exists_fn=None, full_mode: bool = False) -> Dict:
+    def crawl_site(self, site_name: str, max_count: int = None, essay_exists_fn=None, full_mode: bool = False, resource_cache=None) -> Dict:
         spider = self.get_spider(site_name)
         if not spider:
             self.logger.error(f'Spider not found: {site_name}')
@@ -94,6 +94,8 @@ class SpiderManager:
             }
 
         try:
+            if resource_cache:
+                spider.set_resource_cache(resource_cache)
             essays = spider.crawl(max_count=max_count, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
             failures = spider.get_failures()
             return {
@@ -115,10 +117,10 @@ class SpiderManager:
                 }]
             }
 
-    def crawl_all(self, max_per_site: int = None, essay_exists_fn=None, full_mode: bool = False) -> Dict:
+    def crawl_all(self, max_per_site: int = None, essay_exists_fn=None, full_mode: bool = False, resource_cache=None) -> Dict:
         results = {}
         for site_name, spider in self.spiders.items():
             self.logger.info(f'Starting crawl: {site_name}')
-            result = self.crawl_site(site_name, max_count=max_per_site, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
+            result = self.crawl_site(site_name, max_count=max_per_site, essay_exists_fn=essay_exists_fn, full_mode=full_mode, resource_cache=resource_cache)
             results[site_name] = result
         return results

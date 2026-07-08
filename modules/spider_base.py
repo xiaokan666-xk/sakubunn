@@ -23,7 +23,7 @@ CRAWL_TYPE_PDF_OCR = 'D'
 class SpiderBase(ABC):
     site_name = ""
     site_url = ""
-    
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -39,6 +39,7 @@ class SpiderBase(ABC):
         self.error_tracker = ErrorTracker()
         self._temp_dir = None
         self._failures = []
+        self._resource_cache = None
     
     @property
     def temp_dir(self):
@@ -159,27 +160,51 @@ class SpiderBase(ABC):
     def is_pdf_url(self, url: str) -> bool:
         return bool(re.search(r'\.pdf(\?|$)', url, re.IGNORECASE))
     
+    def set_resource_cache(self, cache):
+        self._resource_cache = cache
+
     def handle_pdf_url(self, pdf_url: str) -> Optional[Dict]:
         self.logger.info(f'Handling PDF: {pdf_url}')
-        
+
+        if self._resource_cache and self._resource_cache.resource_exists(pdf_url):
+            cached = self._resource_cache.get_processed_resource(pdf_url)
+            if cached and cached['status'] == 'success':
+                self.logger.info(f'[{self.site_name}] Using cached PDF result: {pdf_url}')
+                return {
+                    'title': '',
+                    'author': '',
+                    'school': '',
+                    'body': cached.get('processed_content', ''),
+                    'source': pdf_url,
+                    'date': '',
+                    'site': self.site_name
+                }
+
         content = self.fetch_binary(pdf_url)
         if not content:
             content = self.playwright.fetch_binary(pdf_url)
         if not content:
             self._record_failure(pdf_url, 'PDF_DOWNLOAD_FAILED', '无法下载PDF文件')
             return None
-        
+
         filename = re.sub(r'[^\w\-_\.]', '_', os.path.basename(pdf_url.split('?')[0])) or 'temp.pdf'
         pdf_path = os.path.join(self.temp_dir, filename)
-        
+
         with open(pdf_path, 'wb') as f:
             f.write(content)
-        
+
         try:
             result = self.pdf_parser.parse(pdf_path)
             if result:
                 result['source'] = pdf_url
                 result['site'] = self.site_name
+                if self._resource_cache:
+                    self._resource_cache.insert_processed_resource(
+                        resource_url=pdf_url,
+                        resource_type='pdf',
+                        content=content.decode('utf-8', errors='ignore') if isinstance(content, bytes) else str(content),
+                        processed_content=result.get('body', '')
+                    )
                 if not result.get('body'):
                     self._record_failure(pdf_url, 'PDF_PARSE_EMPTY', 'PDF解析后正文为空')
             return result
