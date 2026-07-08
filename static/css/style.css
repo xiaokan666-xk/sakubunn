@@ -738,6 +738,184 @@ body {
 }
 
 /* ========================================
+   Time Filter
+   ======================================== */
+.time-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+}
+
+.time-filter-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.time-filter-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.time-chip {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.time-chip:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.time-chip.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+}
+
+.time-custom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.date-input {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-input);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.date-separator {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* ========================================
+   Crawl Mode
+   ======================================== */
+.crawl-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+}
+
+.crawl-mode-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.mode-option input[type="radio"] {
+    accent-color: var(--color-primary);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}
+
+.mode-text {
+    transition: color 0.2s;
+}
+
+.mode-option:hover .mode-text {
+    color: var(--text-primary);
+}
+
+/* ========================================
+   Site Updates Bar
+   ======================================== */
+.site-updates-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    overflow-x: auto;
+}
+
+.updates-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.site-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.site-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--bg-hover);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.site-tag .tag-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.site-tag .tag-time {
+    color: var(--text-muted);
+}
+
+.site-tag .tag-count {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* ========================================
    Responsive
    ======================================== */
 @media (max-width: 768px) {
@@ -746,37 +924,53 @@ body {
         gap: 12px;
         align-items: stretch;
     }
-    
+
     .header-actions {
         justify-content: flex-end;
     }
-    
+
     .filter-bar {
         flex-direction: column;
     }
-    
+
     .filter-group {
         width: 100%;
     }
-    
+
     .filter-select {
         flex: 1;
     }
-    
+
+    .time-filter-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .time-custom {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .crawl-mode-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
     .essay-meta-row {
         gap: 8px;
     }
-    
+
     .essay-actions {
         opacity: 1;
     }
-    
+
     .pagination-bar {
         flex-direction: column;
         gap: 12px;
         align-items: center;
     }
-    
+
     .essay-meta {
         grid-template-columns: 1fr;
     }

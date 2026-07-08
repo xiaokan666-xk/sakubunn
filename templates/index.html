@@ -52,6 +52,45 @@
                 </div>
             </div>
 
+            <!-- Time Filter -->
+            <div class="time-filter-bar">
+                <span class="time-filter-label">时间范围：</span>
+                <div class="time-filter-chips">
+                    <button class="time-chip active" data-relative="">全部</button>
+                    <button class="time-chip" data-relative="week">仅一周</button>
+                    <button class="time-chip" data-relative="month">仅一个月</button>
+                    <button class="time-chip" data-relative="half_year">近半年</button>
+                    <button class="time-chip" data-relative="year">近一年</button>
+                </div>
+                <div class="time-custom">
+                    <input type="date" id="date-from" class="date-input">
+                    <span class="date-separator">—</span>
+                    <input type="date" id="date-to" class="date-input">
+                    <button class="btn-text" id="apply-date">应用</button>
+                </div>
+            </div>
+
+            <!-- Crawl Mode -->
+            <div class="crawl-mode-bar">
+                <span class="crawl-mode-label">抓取模式：</span>
+                <label class="mode-option">
+                    <input type="radio" name="crawl_mode" value="incremental" checked>
+                    <span class="mode-text">增量抓取（默认，仅新增）</span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="crawl_mode" value="full">
+                    <span class="mode-text">全量模式（抓取所有历史）</span>
+                </label>
+            </div>
+
+            <!-- Site Update Info -->
+            <div class="site-updates-bar" id="site-updates-bar">
+                <span class="updates-label">网站状态：</span>
+                <div class="site-tags" id="site-tags">
+                    <!-- JS populated -->
+                </div>
+            </div>
+
             <!-- Stats Bar -->
             <div class="stats-bar">
                 <span class="stat-item">共 <strong id="total-count">0</strong> 篇作文</span>

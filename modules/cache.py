@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import DB_PATH
 
 
@@ -40,6 +40,14 @@ class CacheManager:
                 status TEXT NOT NULL,
                 message TEXT,
                 crawl_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS site_updates (
+                site_name TEXT PRIMARY KEY,
+                site_url TEXT NOT NULL,
+                last_crawl_time DATETIME,
+                last_essay_count INTEGER DEFAULT 0
             )
         ''')
         self.conn.commit()
@@ -83,7 +91,7 @@ class CacheManager:
         row = self.cursor.fetchone()
         return self._row_to_dict(row) if row else None
 
-    def search_essays(self, keyword=None, source=None):
+    def search_essays(self, keyword=None, source=None, date_from=None, date_to=None):
         query = 'SELECT * FROM essays WHERE 1=1'
         params = []
 
@@ -94,6 +102,14 @@ class CacheManager:
         if source:
             query += ' AND site = ?'
             params.append(source)
+
+        if date_from:
+            query += ' AND crawl_time >= ?'
+            params.append(date_from)
+
+        if date_to:
+            query += ' AND crawl_time <= ?'
+            params.append(date_to)
 
         query += ' ORDER BY crawl_time DESC'
         self.cursor.execute(query, params)
@@ -107,6 +123,62 @@ class CacheManager:
         self.cursor.execute(f'SELECT * FROM essays WHERE id IN ({placeholders})', ids)
         rows = self.cursor.fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def get_essays_by_date_range(self, date_from=None, date_to=None):
+        return self.search_essays(date_from=date_from, date_to=date_to)
+
+    def get_essays_by_relative_time(self, days=None, months=None):
+        now = datetime.now()
+        if months:
+            date_from = (now - timedelta(days=months * 30)).strftime('%Y-%m-%d %H:%M:%S')
+        elif days:
+            date_from = (now - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            return self.get_all_essays()
+        return self.search_essays(date_from=date_from)
+
+    def get_site_last_update(self, site_name):
+        self.cursor.execute('''
+            SELECT MAX(crawl_time) FROM essays WHERE site = ?
+        ''', (site_name,))
+        result = self.cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_all_site_updates(self):
+        self.cursor.execute('''
+            SELECT site, MAX(crawl_time), COUNT(*) FROM essays GROUP BY site
+        ''')
+        rows = self.cursor.fetchall()
+        result = {}
+        for row in rows:
+            result[row[0]] = {
+                'last_update': row[1],
+                'essay_count': row[2]
+            }
+        return result
+
+    def update_site_crawl_time(self, site_name, site_url):
+        self.cursor.execute('''
+            INSERT OR REPLACE INTO site_updates (site_name, site_url, last_crawl_time)
+            VALUES (?, ?, ?)
+        ''', (site_name, site_url, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.conn.commit()
+
+    def get_site_crawl_info(self):
+        self.cursor.execute('SELECT * FROM site_updates')
+        rows = self.cursor.fetchall()
+        result = {}
+        for row in rows:
+            result[row[0]] = {
+                'site_url': row[1],
+                'last_crawl_time': row[2],
+                'last_essay_count': row[3]
+            }
+        return result
+
+    def essay_exists(self, source_url):
+        self.cursor.execute('SELECT id FROM essays WHERE source = ? LIMIT 1', (source_url,))
+        return self.cursor.fetchone() is not None
 
     def _row_to_dict(self, row):
         return {

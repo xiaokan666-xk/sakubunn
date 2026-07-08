@@ -212,38 +212,43 @@ class SpiderBase(ABC):
     def parse_essay_page(self, html: str, essay_url: str) -> Dict:
         pass
     
-    def crawl(self, max_count: int = None) -> List[Dict]:
+    def crawl(self, max_count: int = None, essay_exists_fn=None, full_mode: bool = False) -> List[Dict]:
         essays = []
         self._failures = []
         list_urls = self.get_essay_list_urls()
-        self.logger.info(f'[{self.site_name}] Found {len(list_urls)} list pages')
-        
+        self.logger.info(f'[{self.site_name}] Found {len(list_urls)} list pages, full_mode={full_mode}')
+
         for list_url in list_urls:
             html = self.fetch(list_url)
             if not html:
                 self._record_failure(list_url, 'LIST_FETCH_FAILED', '列表页抓取失败')
                 continue
-            
+
             try:
                 items = self.parse_list_page(html, list_url)
             except Exception as e:
                 self._record_failure(list_url, 'LIST_PARSE_EXCEPTION', f'列表页解析异常: {str(e)}')
                 items = []
-            
+
             if not items:
                 self._record_failure(list_url, 'PARSE_EMPTY', 'parse_list_page returned empty - 该网站页面可能已更新，请检查抓取规则')
                 continue
-            
+
             self.logger.info(f'[{self.site_name}] Found {len(items)} essay links in {list_url}')
-            
+
             for item in items:
                 if max_count and len(essays) >= max_count:
                     break
-                
+
                 essay_url = item.get('url', '')
                 if not essay_url:
                     continue
-                
+
+                # 增量模式：跳过已存在的URL
+                if not full_mode and essay_exists_fn and essay_exists_fn(essay_url):
+                    self.logger.info(f'[{self.site_name}] Skip existing: {essay_url}')
+                    continue
+
                 if self.is_pdf_url(essay_url):
                     essay = self.handle_pdf_url(essay_url)
                 else:
@@ -255,15 +260,15 @@ class SpiderBase(ABC):
                     except Exception as e:
                         self._record_failure(essay_url, 'ESSAY_PARSE_EXCEPTION', f'详情页解析异常: {str(e)}')
                         essay = None
-                    
+
                     if essay:
                         if not essay.get('body'):
                             self._record_failure(essay_url, 'PARSE_EMPTY', f'详情页正文为空 - 该网站页面可能已更新，请检查抓取规则: title={essay.get("title", "")}')
                         else:
                             essay['body'] = self.handle_vertical_text(essay_html, essay['body'])
-                
+
                 if essay and essay.get('body'):
                     essays.append(essay)
                     self.logger.info(f'[{self.site_name}] Parsed: {essay["title"][:30]}')
-        
+
         return essays

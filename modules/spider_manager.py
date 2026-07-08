@@ -13,12 +13,12 @@ class SpiderManager:
         self.error_tracker = ErrorTracker()
         self.logger = logging.getLogger(__name__)
         self._load_spiders()
-    
+
     def _load_spiders(self):
         if not os.path.isdir(self.spiders_dir):
             self.logger.warning(f'Spiders directory not found: {self.spiders_dir}')
             return
-        
+
         for filename in os.listdir(self.spiders_dir):
             if filename.startswith('_') or not filename.endswith('.py'):
                 continue
@@ -27,8 +27,8 @@ class SpiderManager:
                 module = importlib.import_module(f'{self.spiders_dir}.{module_name}')
                 for attr_name in dir(module):
                     attr = getattr(module, attr_name)
-                    if (isinstance(attr, type) and 
-                        issubclass(attr, SpiderBase) and 
+                    if (isinstance(attr, type) and
+                        issubclass(attr, SpiderBase) and
                         attr is not SpiderBase and
                         hasattr(attr, 'site_name') and attr.site_name):
                         spider = attr()
@@ -36,16 +36,16 @@ class SpiderManager:
                         self.logger.info(f'Loaded spider: {spider.site_name}')
             except Exception as e:
                 self.logger.error(f'Failed to load spider {module_name}: {e}')
-    
+
     def get_spider(self, site_name: str) -> SpiderBase:
         return self.spiders.get(site_name)
-    
+
     def list_sites(self) -> List[Dict]:
         return [
             {'name': spider.site_name, 'url': spider.site_url}
             for spider in self.spiders.values()
         ]
-    
+
     def get_failed_sites(self) -> List[Dict]:
         failed = []
         for site_name, spider in self.spiders.items():
@@ -62,7 +62,7 @@ class SpiderManager:
                     'error_count': len(errors)
                 })
         return failed
-    
+
     def get_all_site_status(self) -> List[Dict]:
         status = []
         for site_name, spider in self.spiders.items():
@@ -76,8 +76,8 @@ class SpiderManager:
                 'latest_error': latest_error
             })
         return status
-    
-    def crawl_site(self, site_name: str, max_count: int = None) -> Dict:
+
+    def crawl_site(self, site_name: str, max_count: int = None, essay_exists_fn=None, full_mode: bool = False) -> Dict:
         spider = self.get_spider(site_name)
         if not spider:
             self.logger.error(f'Spider not found: {site_name}')
@@ -92,9 +92,9 @@ class SpiderManager:
                     'error_msg': f'未找到该网站对应的Spider: {site_name}'
                 }]
             }
-        
+
         try:
-            essays = spider.crawl(max_count=max_count)
+            essays = spider.crawl(max_count=max_count, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
             failures = spider.get_failures()
             return {
                 'success': len(essays) > 0 or len(failures) == 0,
@@ -114,11 +114,11 @@ class SpiderManager:
                     'error_msg': str(e)
                 }]
             }
-    
-    def crawl_all(self, max_per_site: int = None) -> Dict:
+
+    def crawl_all(self, max_per_site: int = None, essay_exists_fn=None, full_mode: bool = False) -> Dict:
         results = {}
         for site_name, spider in self.spiders.items():
             self.logger.info(f'Starting crawl: {site_name}')
-            result = self.crawl_site(site_name, max_count=max_per_site)
+            result = self.crawl_site(site_name, max_count=max_per_site, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
             results[site_name] = result
         return results

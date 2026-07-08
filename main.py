@@ -4,6 +4,7 @@ import webbrowser
 import threading
 import logging
 import tempfile
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file
 from config import DB_PATH, LOG_FILE
 from modules.cache import CacheManager
@@ -35,7 +36,28 @@ def index():
 def get_essays():
     keyword = request.args.get('keyword', '')
     source = request.args.get('source', '')
-    essays = cache_manager.search_essays(keyword=keyword, source=source)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    relative = request.args.get('relative', '')
+
+    if relative:
+        if relative == 'week':
+            essays = cache_manager.get_essays_by_relative_time(days=7)
+        elif relative == 'month':
+            essays = cache_manager.get_essays_by_relative_time(months=1)
+        elif relative == 'half_year':
+            essays = cache_manager.get_essays_by_relative_time(months=6)
+        elif relative == 'year':
+            essays = cache_manager.get_essays_by_relative_time(months=12)
+        else:
+            essays = cache_manager.get_all_essays()
+    else:
+        essays = cache_manager.search_essays(
+            keyword=keyword,
+            source=source,
+            date_from=date_from if date_from else None,
+            date_to=date_to if date_to else None
+        )
     return jsonify(essays)
 
 
@@ -50,12 +72,19 @@ def get_essay(essay_id):
 @app.route('/api/sites', methods=['GET'])
 def get_sites():
     sites = spider_manager.list_sites()
+    updates = cache_manager.get_all_site_updates()
+    for site in sites:
+        info = updates.get(site['name'], {})
+        site['last_update'] = info.get('last_update', '')
+        site['essay_count'] = info.get('essay_count', 0)
     return jsonify(sites)
 
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     stats = cache_manager.get_stats()
+    site_updates = cache_manager.get_all_site_updates()
+    stats['site_updates'] = site_updates
     return jsonify(stats)
 
 
@@ -67,13 +96,15 @@ def export_single(essay_id):
 
     essay_data = {
         'title': essay['title'],
-        'content': essay['body'],
-        'source_url': essay['source'],
-        'source_name': essay['site'],
-        'word_count': len(essay['body'])
+        'author': essay['author'],
+        'school': essay['school'],
+        'body': essay['body'],
+        'source': essay['source'],
+        'date': essay['date'],
+        'site': essay['site']
     }
 
-    filename = f"{essay['title'][:30]}.docx".replace('/', '_').replace('\\', '_')
+    filename = f"{essay['title'][:30]} {essay['site']}.docx".replace('/', '_').replace('\\', '_')
     save_path = os.path.join(os.path.dirname(DB_PATH), filename)
 
     if exporter.export_single(essay_data, save_path):
@@ -84,15 +115,21 @@ def export_single(essay_id):
 @app.route('/api/export_batch', methods=['GET'])
 def export_batch():
     ids_param = request.args.get('ids', '')
-    if not ids_param:
-        return jsonify({'error': 'No IDs provided'}), 400
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
 
-    try:
-        ids = [int(x.strip()) for x in ids_param.split(',') if x.strip()]
-    except ValueError:
-        return jsonify({'error': 'Invalid IDs'}), 400
+    essays = []
+    if ids_param:
+        try:
+            ids = [int(x.strip()) for x in ids_param.split(',') if x.strip()]
+            essays = cache_manager.get_essays_by_ids(ids)
+        except ValueError:
+            return jsonify({'error': 'Invalid IDs'}), 400
+    elif date_from and date_to:
+        essays = cache_manager.get_essays_by_date_range(date_from, date_to)
+    else:
+        return jsonify({'error': 'No IDs or date range provided'}), 400
 
-    essays = cache_manager.get_essays_by_ids(ids)
     if not essays:
         return jsonify({'error': 'No essays found'}), 404
 
@@ -100,16 +137,25 @@ def export_batch():
     for essay in essays:
         essay_data_list.append({
             'title': essay['title'],
-            'content': essay['body'],
-            'source_url': essay['source'],
-            'source_name': essay['site'],
-            'word_count': len(essay['body'])
+            'author': essay['author'],
+            'school': essay['school'],
+            'body': essay['body'],
+            'source': essay['source'],
+            'date': essay['date'],
+            'site': essay['site']
         })
 
-    filename = f"batch_export_{len(essay_data_list)}_essays.docx"
+    # 命名：作文大赏2026.1.1-2026.7.1.docx
+    if date_from and date_to:
+        df = date_from.replace('-', '.').split(' ')[0]
+        dt = date_to.replace('-', '.').split(' ')[0]
+        filename = f"作文大赏{df}-{dt}.docx"
+    else:
+        filename = f"batch_export_{len(essay_data_list)}_essays.docx"
+
     save_path = os.path.join(os.path.dirname(DB_PATH), filename)
 
-    if exporter.export_batch(essay_data_list, save_path):
+    if exporter.export_batch(essay_data_list, save_path, date_from=date_from, date_to=date_to):
         return send_file(save_path, as_attachment=True)
     return jsonify({'error': 'Export failed'}), 500
 
@@ -118,25 +164,36 @@ def export_batch():
 def crawl():
     data = request.json or {}
     site_name = data.get('site_name', '')
+    full_mode = data.get('full_mode', False)
+
+    def essay_exists_fn(url):
+        return cache_manager.essay_exists(url)
 
     if site_name:
-        result = spider_manager.crawl_site(site_name)
+        result = spider_manager.crawl_site(site_name, essay_exists_fn=essay_exists_fn, full_mode=full_mode)
         if result['success']:
+            inserted = 0
             for essay in result['essays']:
-                cache_manager.insert_essay(essay)
+                if cache_manager.insert_essay(essay):
+                    inserted += 1
+            cache_manager.update_site_crawl_time(site_name, spider_manager.get_spider(site_name).site_url)
         return jsonify({
             'success': result['success'],
             'count': len(result['essays']),
             'failures': result['failures']
         })
     else:
-        results = spider_manager.crawl_all()
+        results = spider_manager.crawl_all(essay_exists_fn=essay_exists_fn, full_mode=full_mode)
         total_count = 0
         all_failures = []
         for site_name, result in results.items():
+            inserted = 0
             for essay in result['essays']:
-                cache_manager.insert_essay(essay)
-            total_count += len(result['essays'])
+                if cache_manager.insert_essay(essay):
+                    inserted += 1
+            total_count += inserted
+            if result['essays']:
+                cache_manager.update_site_crawl_time(site_name, spider_manager.get_spider(site_name).site_url)
             all_failures.extend(result['failures'])
         return jsonify({
             'success': total_count > 0,

@@ -7,12 +7,16 @@ let selectedIds = new Set();
 let currentPage = 1;
 const pageSize = 15;
 let currentModalId = null;
+let currentTimeFilter = '';
+let customDateFrom = '';
+let customDateTo = '';
 
 // ========================================
 // Init
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
     loadEssays();
+    loadSites();
     bindEvents();
 });
 
@@ -30,6 +34,35 @@ function bindEvents() {
     document.getElementById('sort-select').addEventListener('change', () => {
         currentPage = 1;
         applyFilters();
+    });
+
+    // Time filter chips
+    document.querySelectorAll('.time-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            currentTimeFilter = chip.dataset.relative;
+            customDateFrom = '';
+            customDateTo = '';
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value = '';
+            currentPage = 1;
+            loadEssays();
+        });
+    });
+
+    // Custom date apply
+    document.getElementById('apply-date').addEventListener('click', () => {
+        const fromVal = document.getElementById('date-from').value;
+        const toVal = document.getElementById('date-to').value;
+        if (fromVal && toVal) {
+            customDateFrom = fromVal + ' 00:00:00';
+            customDateTo = toVal + ' 23:59:59';
+            currentTimeFilter = 'custom';
+            document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+            currentPage = 1;
+            loadEssays();
+        }
     });
 
     document.getElementById('select-all').addEventListener('change', handleSelectAll);
@@ -52,8 +85,8 @@ function bindEvents() {
     });
 
     document.getElementById('refresh-btn').addEventListener('click', () => {
-        showToast('正在刷新数据...');
-        loadEssays();
+        showToast('正在抓取数据...');
+        startCrawl();
     });
 
     document.getElementById('batch-export-btn').addEventListener('click', batchExport);
@@ -78,14 +111,26 @@ function bindEvents() {
 // Data Loading
 // ========================================
 function loadEssays() {
-    fetch('/api/essays')
+    let url = '/api/essays';
+    const params = new URLSearchParams();
+
+    if (currentTimeFilter && currentTimeFilter !== 'custom') {
+        params.append('relative', currentTimeFilter);
+    } else if (customDateFrom && customDateTo) {
+        params.append('date_from', customDateFrom);
+        params.append('date_to', customDateTo);
+    }
+
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+
+    fetch(url)
         .then(r => r.json())
         .then(data => {
             allEssays = data || [];
-            populateSiteFilter();
             applyFilters();
             updateStats();
-            showToast(`已加载 ${allEssays.length} 篇作文`);
         })
         .catch(err => {
             console.error('Load essays failed:', err);
@@ -93,16 +138,41 @@ function loadEssays() {
         });
 }
 
-function populateSiteFilter() {
-    const sites = [...new Set(allEssays.map(e => e.site).filter(Boolean))];
+function loadSites() {
+    fetch('/api/sites')
+        .then(r => r.json())
+        .then(sites => {
+            populateSiteFilter(sites);
+            renderSiteTags(sites);
+        })
+        .catch(err => {
+            console.error('Load sites failed:', err);
+        });
+}
+
+function populateSiteFilter(sites) {
     const select = document.getElementById('site-filter');
     select.innerHTML = '<option value="">全部网站</option>';
     sites.forEach(site => {
         const opt = document.createElement('option');
-        opt.value = site;
-        opt.textContent = site;
+        opt.value = site.name;
+        opt.textContent = site.name;
         select.appendChild(opt);
     });
+}
+
+function renderSiteTags(sites) {
+    const container = document.getElementById('site-tags');
+    container.innerHTML = sites.map(site => {
+        const time = site.last_update ? formatDateTime(site.last_update) : '未抓取';
+        return `
+            <div class="site-tag">
+                <span class="tag-name">${escapeHtml(site.name)}</span>
+                <span class="tag-time">${time}</span>
+                <span class="tag-count">${site.essay_count || 0}篇</span>
+            </div>
+        `;
+    }).join('');
 }
 
 function updateStats() {
@@ -113,7 +183,7 @@ function updateStats() {
     const times = allEssays.map(e => e.crawl_time).filter(Boolean);
     if (times.length > 0) {
         const latest = times.sort().pop();
-        document.getElementById('last-update').textContent = `最后更新：${formatDate(latest)}`;
+        document.getElementById('last-update').textContent = `最后更新：${formatDateTime(latest)}`;
     }
 }
 
@@ -173,7 +243,7 @@ function renderEssayList() {
                     </svg>
                 </div>
                 <p class="empty-title">没有找到匹配的作文</p>
-                <p class="empty-desc">请尝试调整搜索条件</p>
+                <p class="empty-desc">请尝试调整搜索或筛选条件</p>
             </div>`;
         document.getElementById('pagination-bar').style.display = 'none';
         return;
@@ -353,6 +423,29 @@ function updateSelectAllState() {
 }
 
 // ========================================
+// Crawl
+// ========================================
+function startCrawl() {
+    const fullMode = document.querySelector('input[name="crawl_mode"]:checked').value === 'full';
+
+    fetch('/api/crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_mode: fullMode })
+    })
+    .then(r => r.json())
+    .then(data => {
+        showToast(`抓取完成，新增 ${data.count} 篇作文`);
+        loadEssays();
+        loadSites();
+    })
+    .catch(err => {
+        console.error('Crawl failed:', err);
+        showToast('抓取失败，请查看日志');
+    });
+}
+
+// ========================================
 // Preview Modal
 // ========================================
 function previewEssay(id) {
@@ -363,7 +456,7 @@ function previewEssay(id) {
     document.getElementById('modal-title').textContent = essay.title || '无标题';
     document.getElementById('modal-site').textContent = essay.site || '未知';
     document.getElementById('modal-author').textContent = essay.author || '未知';
-    document.getElementById('modal-date').textContent = formatDate(essay.crawl_time);
+    document.getElementById('modal-date').textContent = formatDateTime(essay.crawl_time);
     document.getElementById('modal-source').textContent = essay.source || '';
     document.getElementById('modal-source').href = essay.source || '#';
     document.getElementById('modal-body').textContent = essay.body || '';
@@ -417,6 +510,13 @@ function formatDate(dateStr) {
     const d = new Date(dateStr);
     if (isNaN(d)) return dateStr;
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return '--';
+    const d = new Date(dateStr);
+    if (isNaN(d)) return dateStr;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 function debounce(fn, delay) {
