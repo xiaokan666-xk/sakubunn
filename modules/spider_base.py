@@ -3,6 +3,9 @@ import logging
 import requests
 import os
 import tempfile
+import ssl
+import urllib3
+from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
@@ -14,10 +17,46 @@ from modules.vertical_text_converter import VerticalTextConverter
 from modules.error_tracker import ErrorTracker
 
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
 CRAWL_TYPE_HTML = 'A'
 CRAWL_TYPE_HTML_MULTI = 'B'
 CRAWL_TYPE_PDF_TEXT = 'C'
 CRAWL_TYPE_PDF_OCR = 'D'
+
+
+def create_legacy_ssl_context():
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
+        ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+    if hasattr(ssl, 'OP_NO_SSLv2'):
+        ctx.options &= ~ssl.OP_NO_SSLv2
+    if hasattr(ssl, 'OP_NO_SSLv3'):
+        ctx.options &= ~ssl.OP_NO_SSLv3
+    if hasattr(ssl, 'OP_NO_COMPRESSION'):
+        ctx.options &= ~ssl.OP_NO_COMPRESSION
+    try:
+        ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+    except Exception:
+        pass
+    return ctx
+
+
+class SSLAdapter(HTTPAdapter):
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        ctx = create_legacy_ssl_context()
+        pool_kwargs['ssl_context'] = ctx
+        pool_kwargs['cert_reqs'] = 'CERT_NONE'
+        pool_kwargs['assert_hostname'] = False
+        self.poolmanager = urllib3.PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            **pool_kwargs
+        )
 
 
 class SpiderBase(ABC):
@@ -31,6 +70,9 @@ class SpiderBase(ABC):
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
         })
+        self.session.verify = False
+        self.session.mount('https://', SSLAdapter())
+        self.session.mount('http://', SSLAdapter())
         self.logger = logging.getLogger(self.__class__.__name__)
         self.playwright = PlaywrightFetcher()
         self.ocr_engine = PaddleOCREngine()

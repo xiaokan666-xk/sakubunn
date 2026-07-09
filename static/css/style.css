@@ -814,6 +814,55 @@ body {
 }
 
 /* ========================================
+   Crawl Search
+   ======================================== */
+.crawl-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+}
+
+.crawl-search-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.crawl-search-input {
+    flex: 1;
+    max-width: 400px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-input);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+}
+
+.crawl-search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.crawl-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ========================================
    Crawl Mode
    ======================================== */
 .crawl-mode-bar {

@@ -8,20 +8,19 @@ from config import DB_PATH
 class CacheManager:
     def __init__(self):
         self.conn = None
-        self.cursor = None
         self._init_db()
 
     def _init_db(self):
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        self.conn = sqlite3.connect(DB_PATH)
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.execute('PRAGMA foreign_keys = ON')
-        self.cursor = self.conn.cursor()
         self._create_tables()
         self._migrate_database()
         self._create_indexes()
 
     def _create_tables(self):
-        self.cursor.execute('''
+        cursor = self.conn.cursor()
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS essays (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL DEFAULT '',
@@ -36,7 +35,7 @@ class CacheManager:
                 body_hash TEXT
             )
         ''')
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS crawl_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_name TEXT NOT NULL,
@@ -46,7 +45,7 @@ class CacheManager:
                 crawl_time DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS site_updates (
                 site_name TEXT PRIMARY KEY,
                 site_url TEXT NOT NULL,
@@ -54,7 +53,7 @@ class CacheManager:
                 last_essay_count INTEGER DEFAULT 0
             )
         ''')
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS processed_resources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 resource_url TEXT UNIQUE NOT NULL,
@@ -69,16 +68,17 @@ class CacheManager:
 
     def _migrate_database(self):
         try:
-            self.cursor.execute("PRAGMA table_info(essays)")
-            columns = [col[1] for col in self.cursor.fetchall()]
+            cursor = self.conn.cursor()
+            cursor.execute("PRAGMA table_info(essays)")
+            columns = [col[1] for col in cursor.fetchall()]
 
             if 'body_hash' not in columns:
-                self.cursor.execute('ALTER TABLE essays ADD COLUMN body_hash TEXT')
+                cursor.execute('ALTER TABLE essays ADD COLUMN body_hash TEXT')
                 self._update_existing_body_hashes()
 
-            self.cursor.execute("PRAGMA table_info(processed_resources)")
-            if not self.cursor.fetchall():
-                self.cursor.execute('''
+            cursor.execute("PRAGMA table_info(processed_resources)")
+            if not cursor.fetchall():
+                cursor.execute('''
                     CREATE TABLE processed_resources (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         resource_url TEXT UNIQUE NOT NULL,
@@ -96,24 +96,26 @@ class CacheManager:
 
     def _update_existing_body_hashes(self):
         try:
-            self.cursor.execute('SELECT id, body FROM essays WHERE body_hash IS NULL')
-            rows = self.cursor.fetchall()
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT id, body FROM essays WHERE body_hash IS NULL')
+            rows = cursor.fetchall()
             for row in rows:
                 essay_id, body = row
                 body_hash = self._generate_body_hash(body)
-                self.cursor.execute('UPDATE essays SET body_hash = ? WHERE id = ?', (body_hash, essay_id))
+                cursor.execute('UPDATE essays SET body_hash = ? WHERE id = ?', (body_hash, essay_id))
             self.conn.commit()
         except Exception as e:
             print(f"Update body hashes error: {e}")
 
     def _create_indexes(self):
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_source ON essays(source)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_site ON essays(site)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_crawl_time ON essays(crawl_time)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_body_hash ON essays(body_hash)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_crawl_logs_source ON crawl_logs(source_name)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_resources_url ON processed_resources(resource_url)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_resources_hash ON processed_resources(content_hash)')
+        cursor = self.conn.cursor()
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_source ON essays(source)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_site ON essays(site)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_crawl_time ON essays(crawl_time)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_essays_body_hash ON essays(body_hash)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_crawl_logs_source ON crawl_logs(source_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_resources_url ON processed_resources(resource_url)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_resources_hash ON processed_resources(content_hash)')
         self.conn.commit()
 
     def _generate_unique_key(self, essay):
@@ -130,7 +132,8 @@ class CacheManager:
             unique_key = self._generate_unique_key(essay)
             body_hash = self._generate_body_hash(essay.get('body', ''))
 
-            self.cursor.execute('''
+            cursor = self.conn.cursor()
+            cursor.execute('''
                 INSERT OR IGNORE INTO essays 
                 (title, author, school, body, source, date, site, unique_key, body_hash)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -146,7 +149,7 @@ class CacheManager:
                 body_hash
             ))
             self.conn.commit()
-            return self.cursor.lastrowid
+            return cursor.lastrowid
         except sqlite3.IntegrityError:
             return None
         except Exception as e:
@@ -154,24 +157,28 @@ class CacheManager:
             return None
 
     def essay_exists_by_url(self, source_url):
-        self.cursor.execute('SELECT id FROM essays WHERE source = ? LIMIT 1', (source_url,))
-        return self.cursor.fetchone() is not None
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT id FROM essays WHERE source = ? LIMIT 1', (source_url,))
+        return cursor.fetchone() is not None
 
     def essay_exists_by_hash(self, body):
         body_hash = self._generate_body_hash(body)
         if not body_hash:
             return False
-        self.cursor.execute('SELECT id FROM essays WHERE body_hash = ? LIMIT 1', (body_hash,))
-        return self.cursor.fetchone() is not None
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT id FROM essays WHERE body_hash = ? LIMIT 1', (body_hash,))
+        return cursor.fetchone() is not None
 
     def get_all_essays(self):
-        self.cursor.execute('SELECT * FROM essays ORDER BY crawl_time DESC')
-        rows = self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM essays ORDER BY crawl_time DESC')
+        rows = cursor.fetchall()
         return [self._row_to_dict(row) for row in rows]
 
     def get_essay_by_id(self, essay_id):
-        self.cursor.execute('SELECT * FROM essays WHERE id = ?', (essay_id,))
-        row = self.cursor.fetchone()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM essays WHERE id = ?', (essay_id,))
+        row = cursor.fetchone()
         return self._row_to_dict(row) if row else None
 
     def search_essays(self, keyword=None, source=None, date_from=None, date_to=None):
@@ -195,16 +202,18 @@ class CacheManager:
             params.append(date_to)
 
         query += ' ORDER BY crawl_time DESC'
-        self.cursor.execute(query, params)
-        rows = self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
         return [self._row_to_dict(row) for row in rows]
 
     def get_essays_by_ids(self, ids):
         if not ids:
             return []
         placeholders = ','.join('?' * len(ids))
-        self.cursor.execute(f'SELECT * FROM essays WHERE id IN ({placeholders})', ids)
-        rows = self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute(f'SELECT * FROM essays WHERE id IN ({placeholders})', ids)
+        rows = cursor.fetchall()
         return [self._row_to_dict(row) for row in rows]
 
     def get_essays_by_date_range(self, date_from=None, date_to=None):
@@ -221,17 +230,19 @@ class CacheManager:
         return self.search_essays(date_from=date_from)
 
     def get_site_last_update(self, site_name):
-        self.cursor.execute('''
+        cursor = self.conn.cursor()
+        cursor.execute('''
             SELECT MAX(crawl_time) FROM essays WHERE site = ?
         ''', (site_name,))
-        result = self.cursor.fetchone()
+        result = cursor.fetchone()
         return result[0] if result and result[0] else None
 
     def get_all_site_updates(self):
-        self.cursor.execute('''
+        cursor = self.conn.cursor()
+        cursor.execute('''
             SELECT site, MAX(crawl_time), COUNT(*) FROM essays GROUP BY site
         ''')
-        rows = self.cursor.fetchall()
+        rows = cursor.fetchall()
         result = {}
         for row in rows:
             result[row[0]] = {
@@ -241,15 +252,17 @@ class CacheManager:
         return result
 
     def update_site_crawl_time(self, site_name, site_url):
-        self.cursor.execute('''
+        cursor = self.conn.cursor()
+        cursor.execute('''
             INSERT OR REPLACE INTO site_updates (site_name, site_url, last_crawl_time)
             VALUES (?, ?, ?)
         ''', (site_name, site_url, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         self.conn.commit()
 
     def get_site_crawl_info(self):
-        self.cursor.execute('SELECT * FROM site_updates')
-        rows = self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM site_updates')
+        rows = cursor.fetchall()
         result = {}
         for row in rows:
             result[row[0]] = {
@@ -260,13 +273,15 @@ class CacheManager:
         return result
 
     def resource_exists(self, resource_url):
-        self.cursor.execute('SELECT id FROM processed_resources WHERE resource_url = ? LIMIT 1', (resource_url,))
-        return self.cursor.fetchone() is not None
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT id FROM processed_resources WHERE resource_url = ? LIMIT 1', (resource_url,))
+        return cursor.fetchone() is not None
 
     def resource_content_changed(self, resource_url, content):
         new_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
-        self.cursor.execute('SELECT content_hash FROM processed_resources WHERE resource_url = ?', (resource_url,))
-        row = self.cursor.fetchone()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT content_hash FROM processed_resources WHERE resource_url = ?', (resource_url,))
+        row = cursor.fetchone()
         if not row:
             return True
         return row[0] != new_hash
@@ -274,7 +289,8 @@ class CacheManager:
     def insert_processed_resource(self, resource_url, resource_type, content, processed_content=''):
         try:
             content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
-            self.cursor.execute('''
+            cursor = self.conn.cursor()
+            cursor.execute('''
                 INSERT OR REPLACE INTO processed_resources 
                 (resource_url, resource_type, content_hash, processing_time, status, processed_content)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -286,8 +302,9 @@ class CacheManager:
             return False
 
     def get_processed_resource(self, resource_url):
-        self.cursor.execute('SELECT * FROM processed_resources WHERE resource_url = ?', (resource_url,))
-        row = self.cursor.fetchone()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM processed_resources WHERE resource_url = ?', (resource_url,))
+        row = cursor.fetchone()
         if not row:
             return None
         return {
@@ -316,31 +333,35 @@ class CacheManager:
         }
 
     def insert_log(self, source_name, url, status, message=''):
-        self.cursor.execute('''
+        cursor = self.conn.cursor()
+        cursor.execute('''
             INSERT INTO crawl_logs (source_name, url, status, message)
             VALUES (?, ?, ?, ?)
         ''', (source_name, url, status, message))
         self.conn.commit()
 
     def get_logs(self, limit=100):
-        self.cursor.execute('SELECT * FROM crawl_logs ORDER BY crawl_time DESC LIMIT ?', (limit,))
-        return self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM crawl_logs ORDER BY crawl_time DESC LIMIT ?', (limit,))
+        return cursor.fetchall()
 
     def get_stats(self):
-        self.cursor.execute('SELECT COUNT(*) FROM essays')
-        total = self.cursor.fetchone()[0]
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM essays')
+        total = cursor.fetchone()[0]
 
-        self.cursor.execute('SELECT site, COUNT(*) FROM essays GROUP BY site')
-        by_source = dict(self.cursor.fetchall())
+        cursor.execute('SELECT site, COUNT(*) FROM essays GROUP BY site')
+        by_source = dict(cursor.fetchall())
 
         return {'total': total, 'by_source': by_source}
 
     def get_resource_stats(self):
-        self.cursor.execute('SELECT COUNT(*) FROM processed_resources')
-        total = self.cursor.fetchone()[0]
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM processed_resources')
+        total = cursor.fetchone()[0]
 
-        self.cursor.execute('SELECT resource_type, COUNT(*) FROM processed_resources GROUP BY resource_type')
-        by_type = dict(self.cursor.fetchall())
+        cursor.execute('SELECT resource_type, COUNT(*) FROM processed_resources GROUP BY resource_type')
+        by_type = dict(cursor.fetchall())
 
         return {'total': total, 'by_type': by_type}
 

@@ -91,6 +91,28 @@ function bindEvents() {
 
     document.getElementById('batch-export-btn').addEventListener('click', batchExport);
 
+    // Crawl search button
+    document.getElementById('crawl-search-btn').addEventListener('click', () => {
+        const keyword = document.getElementById('crawl-search-input').value.trim();
+        if (keyword) {
+            showToast('正在搜索抓取...');
+            searchAndCrawl(keyword);
+        } else {
+            showToast('请输入搜索关键词');
+        }
+    });
+
+    // Enter key for crawl search
+    document.getElementById('crawl-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const keyword = e.target.value.trim();
+            if (keyword) {
+                showToast('正在搜索抓取...');
+                searchAndCrawl(keyword);
+            }
+        }
+    });
+
     // Modal events
     document.getElementById('modal-close').addEventListener('click', closeModal);
     document.getElementById('modal-close-btn').addEventListener('click', closeModal);
@@ -466,6 +488,28 @@ function showCrawlReport(reportText) {
 
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+function searchAndCrawl(keyword) {
+    fetch('/api/crawl_search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: keyword })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.report) {
+            showCrawlReport(data.report);
+        }
+        showToast(`搜索抓取完成，新增 ${data.count} 篇作文`);
+        loadEssays();
+        loadSites();
+        document.getElementById('crawl-search-input').value = '';
+    })
+    .catch(err => {
+        console.error('Search crawl failed:', err);
+        showToast('搜索抓取失败，请查看日志');
+    });
 }
 
 // ========================================

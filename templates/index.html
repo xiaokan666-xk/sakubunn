@@ -57,8 +57,8 @@
                 <span class="time-filter-label">时间范围：</span>
                 <div class="time-filter-chips">
                     <button class="time-chip active" data-relative="">全部</button>
-                    <button class="time-chip" data-relative="week">仅一周</button>
-                    <button class="time-chip" data-relative="month">仅一个月</button>
+                    <button class="time-chip" data-relative="week">近一周</button>
+                    <button class="time-chip" data-relative="month">近一个月</button>
                     <button class="time-chip" data-relative="half_year">近半年</button>
                     <button class="time-chip" data-relative="year">近一年</button>
                 </div>
@@ -68,6 +68,16 @@
                     <input type="date" id="date-to" class="date-input">
                     <button class="btn-text" id="apply-date">应用</button>
                 </div>
+            </div>
+
+            <!-- Crawl Search -->
+            <div class="crawl-search-bar">
+                <span class="crawl-search-label">搜索抓取：</span>
+                <input type="text" id="crawl-search-input" class="crawl-search-input" placeholder="输入作文标题关键词搜索抓取...">
+                <button class="btn btn-primary btn-sm" id="crawl-search-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    搜索抓取
+                </button>
             </div>
 
             <!-- Crawl Mode -->

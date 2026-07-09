@@ -31,7 +31,17 @@ class PlaywrightFetcher:
             from playwright.sync_api import sync_playwright
             
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=self.headless)
+                browser = p.chromium.launch(
+                    headless=self.headless,
+                    args=[
+                        '--ignore-certificate-errors',
+                        '--ignore-ssl-errors',
+                        '--allow-insecure-localhost',
+                        '--disable-web-security',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox'
+                    ]
+                )
                 context = browser.new_context(
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
                     locale='ja-JP'
@@ -69,7 +79,17 @@ class PlaywrightFetcher:
             from playwright.sync_api import sync_playwright
             
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=self.headless)
+                browser = p.chromium.launch(
+                    headless=self.headless,
+                    args=[
+                        '--ignore-certificate-errors',
+                        '--ignore-ssl-errors',
+                        '--allow-insecure-localhost',
+                        '--disable-web-security',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox'
+                    ]
+                )
                 context = browser.new_context(
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
                 )

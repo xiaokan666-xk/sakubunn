@@ -44,7 +44,16 @@ class PDFSmartParser:
             pages_text = []
             with pdfplumber.open(pdf_path) as pdf:
                 for i, page in enumerate(pdf.pages):
-                    text = page.extract_text() or ''
+                    words = page.extract_words()
+                    if words:
+                        is_vertical = self._detect_vertical_layout(words)
+                        if is_vertical:
+                            text = self._convert_vertical_words_to_text(words, page)
+                        else:
+                            text = page.extract_text() or ''
+                    else:
+                        text = page.extract_text() or ''
+                    
                     if text.strip():
                         pages_text.append({
                             'page': i + 1,
@@ -66,6 +75,41 @@ class PDFSmartParser:
         except Exception as e:
             self.logger.error(f'PDF text parse failed: {e}')
             return None
+    
+    def _detect_vertical_layout(self, words) -> bool:
+        if len(words) < 10:
+            return False
+        
+        x_coords = [round(w['x0'], 1) for w in words]
+        x_counts = {}
+        for x in x_coords:
+            x_counts[x] = x_counts.get(x, 0) + 1
+        
+        max_count = max(x_counts.values())
+        return max_count >= 5
+    
+    def _convert_vertical_words_to_text(self, words, page) -> str:
+        columns = {}
+        
+        for word in words:
+            x_key = round(word['x0'], 1)
+            if x_key not in columns:
+                columns[x_key] = []
+            columns[x_key].append((word['top'], word['text']))
+        
+        for x_key in columns:
+            columns[x_key].sort(key=lambda item: item[0])
+        
+        sorted_columns = sorted(columns.keys(), reverse=True)
+        
+        result_lines = []
+        for x_key in sorted_columns:
+            line_chars = [item[1] for item in columns[x_key]]
+            line = ''.join(line_chars)
+            if line.strip():
+                result_lines.append(line)
+        
+        return '\n'.join(result_lines)
     
     def _parse_with_ocr(self, pdf_path: str, tmpdir: str) -> Optional[Dict]:
         if not self.ocr_engine or not self.ocr_engine.is_available():
@@ -146,10 +190,27 @@ class PDFSmartParser:
         title_match = re.search(r'タイトル[：:\s]*([^\n]+)', text)
         if title_match:
             meta['title'] = title_match.group(1).strip()
+        else:
+            lines = text.split('\n')
+            for line in lines[:5]:
+                line_clean = re.sub(r'[0-9××]+', '', line).strip()
+                if line_clean and len(line_clean) >= 2 and len(line_clean) <= 20:
+                    has_jp = bool(re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', line_clean))
+                    if has_jp:
+                        meta['title'] = line_clean
+                        break
         
         author_match = re.search(r'(作者|氏名|名前|児童名|生徒名)[：:\s]*([^\n]+)', text)
         if author_match:
             meta['author'] = author_match.group(2).strip()
+        else:
+            author_match2 = re.search(r'(\d+年)([^\n]+)', text)
+            if author_match2:
+                year_part = author_match2.group(1)
+                rest = author_match2.group(2).strip()
+                kanji_name = re.search(r'([\u4e00-\u9fff]{2,4})\s*([ぁ-んァ-ヶー]+)', rest)
+                if kanji_name:
+                    meta['author'] = kanji_name.group(1) + ' ' + kanji_name.group(2)
         
         school_match = re.search(r'(学校|学園|小学校|中学校)[：:\s]*([^\n]+)', text)
         if school_match:

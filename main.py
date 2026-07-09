@@ -213,6 +213,53 @@ def crawl():
         })
 
 
+@app.route('/api/crawl_search', methods=['POST'])
+def crawl_search():
+    """搜索抓取：根据关键词过滤已抓取的作文，只保留匹配的"""
+    data = request.json or {}
+    keyword = data.get('keyword', '').strip()
+
+    if not keyword:
+        return jsonify({'success': False, 'count': 0, 'report': '请输入搜索关键词'})
+
+    # 获取所有已抓取的作文
+    all_essays = cache_manager.get_all_essays()
+
+    # 过滤匹配的作文
+    matched_essays = []
+    for essay in all_essays:
+        if keyword.lower() in essay.get('title', '').lower():
+            matched_essays.append(essay)
+
+    # 生成报告
+    report_lines = [
+        f'搜索抓取报告 - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+        '=' * 50,
+        f'搜索关键词: {keyword}',
+        f'匹配作文数: {len(matched_essays)} 篇',
+        '',
+        '匹配结果:',
+    ]
+
+    for i, essay in enumerate(matched_essays[:20], 1):  # 只显示前20篇
+        report_lines.append(f'  [{i}] {essay["title"]}')
+        report_lines.append(f'      作者: {essay.get("author", "未知")}')
+        report_lines.append(f'      学校: {essay.get("school", "未知")}')
+        report_lines.append('')
+
+    if len(matched_essays) > 20:
+        report_lines.append(f'  ... 还有 {len(matched_essays) - 20} 篇')
+
+    report_text = '\n'.join(report_lines)
+
+    return jsonify({
+        'success': True,
+        'count': len(matched_essays),
+        'matched_essays': [{'id': e['id'], 'title': e['title']} for e in matched_essays],
+        'report': report_text
+    })
+
+
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     limit = request.args.get('limit', 10, type=int)

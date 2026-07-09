@@ -20,7 +20,14 @@ class VerticalTextConverter:
             return False
         
         short_lines = sum(1 for l in lines if len(l) <= 2)
-        return short_lines / len(lines) > 0.3
+        if short_lines / len(lines) > 0.3:
+            return True
+        
+        avg_line_length = sum(len(l) for l in lines) / len(lines)
+        if avg_line_length <= 3:
+            return True
+        
+        return False
     
     def is_vertical_html(self, html: str) -> bool:
         vertical_indicators = [
