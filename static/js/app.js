@@ -449,11 +449,12 @@ function updateSelectAllState() {
 // ========================================
 function startCrawl() {
     const fullMode = document.querySelector('input[name="crawl_mode"]:checked').value === 'full';
+    const siteName = document.getElementById('site-filter').value;
 
     fetch('/api/crawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_mode: fullMode })
+        body: JSON.stringify({ site_name: siteName, full_mode: fullMode })
     })
     .then(r => r.json())
     .then(data => {

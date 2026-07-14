@@ -10,6 +10,31 @@ from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 from urllib.parse import urljoin
+
+import tempfile
+
+_legacy_conf_content = """
+openssl_conf = default_conf
+
+[default_conf]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+CipherString = DEFAULT@SECLEVEL=0
+Options = UnsafeLegacyRenegotiation
+"""
+
+_fd, _legacy_ssl_conf = tempfile.mkstemp(suffix='.cnf', text=True)
+try:
+    os.write(_fd, _legacy_conf_content.encode('utf-8'))
+    os.close(_fd)
+    os.environ['OPENSSL_CONF'] = _legacy_ssl_conf
+except Exception:
+    pass
+
 from modules.playwright_fetcher import PlaywrightFetcher
 from modules.paddle_ocr import PaddleOCREngine
 from modules.pdf_smart_parser import PDFSmartParser
@@ -30,18 +55,29 @@ def create_legacy_ssl_context():
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+    
     if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
         ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
-    if hasattr(ssl, 'OP_NO_SSLv2'):
-        ctx.options &= ~ssl.OP_NO_SSLv2
-    if hasattr(ssl, 'OP_NO_SSLv3'):
-        ctx.options &= ~ssl.OP_NO_SSLv3
-    if hasattr(ssl, 'OP_NO_COMPRESSION'):
-        ctx.options &= ~ssl.OP_NO_COMPRESSION
+    
     try:
         ctx.set_ciphers('DEFAULT@SECLEVEL=0')
     except Exception:
         pass
+    
+    if hasattr(ssl, 'TLSVersion'):
+        tls_version = ssl.TLSVersion
+        if hasattr(tls_version, 'TLSv1_1'):
+            ctx.minimum_version = tls_version.TLSv1_1
+        elif hasattr(tls_version, 'TLSv1_2'):
+            ctx.minimum_version = tls_version.TLSv1_2
+        if hasattr(tls_version, 'TLSv1_2'):
+            ctx.maximum_version = tls_version.TLSv1_2
+    
+    if hasattr(ssl, 'OP_NO_TLSv1_1'):
+        ctx.options &= ~ssl.OP_NO_TLSv1_1
+    if hasattr(ssl, 'OP_NO_TLSv1_2'):
+        ctx.options &= ~ssl.OP_NO_TLSv1_2
+    
     return ctx
 
 

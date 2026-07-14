@@ -11,3 +11,9 @@ venv/
 *.jpg
 *.png
 *.docx
+*.exe
+_tmp*.py
+debug_*.py
+test_*.py
+*.xlsx
+*.csv

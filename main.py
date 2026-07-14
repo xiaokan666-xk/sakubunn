@@ -5,6 +5,26 @@ import threading
 import logging
 import tempfile
 from datetime import datetime
+
+_legacy_conf_content = """
+openssl_conf = default_conf
+
+[default_conf]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+CipherString = DEFAULT@SECLEVEL=0
+Options = UnsafeLegacyRenegotiation
+"""
+
+_fd, _legacy_ssl_conf = tempfile.mkstemp(suffix='.cnf', text=True)
+os.write(_fd, _legacy_conf_content.encode('utf-8'))
+os.close(_fd)
+os.environ['OPENSSL_CONF'] = _legacy_ssl_conf
+
 from flask import Flask, render_template, request, jsonify, send_file
 from config import DB_PATH, LOG_FILE
 from modules.cache import CacheManager
@@ -291,4 +311,4 @@ def open_browser():
 
 if __name__ == '__main__':
     threading.Timer(1, open_browser).start()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

@@ -39,12 +39,16 @@ class PlaywrightFetcher:
                         '--allow-insecure-localhost',
                         '--disable-web-security',
                         '--no-sandbox',
-                        '--disable-setuid-sandbox'
+                        '--disable-setuid-sandbox',
+                        '--ssl-version-max=tls1.2',
+                        '--ssl-version-min=tls1.0',
+                        '--ignore-certificate-errors-spki-list'
                     ]
                 )
                 context = browser.new_context(
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-                    locale='ja-JP'
+                    locale='ja-JP',
+                    ignore_https_errors=True
                 )
                 page = context.new_page()
                 page.set_default_timeout(self.timeout)
@@ -87,11 +91,15 @@ class PlaywrightFetcher:
                         '--allow-insecure-localhost',
                         '--disable-web-security',
                         '--no-sandbox',
-                        '--disable-setuid-sandbox'
+                        '--disable-setuid-sandbox',
+                        '--ssl-version-max=tls1.2',
+                        '--ssl-version-min=tls1.0',
+                        '--ignore-certificate-errors-spki-list'
                     ]
                 )
                 context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                    ignore_https_errors=True
                 )
                 page = context.new_page()
                 
